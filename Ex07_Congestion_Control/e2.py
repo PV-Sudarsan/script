@@ -1,7 +1,6 @@
+
 from dataclasses import dataclass
-from typing import Optional
-DCCP_ACK = "ACK"
-DCCP_DATA = "DATA"
+ACK, DATA = "ACK", "DATA"
 @dataclass
 class RHistEntry:
     seq_num: int
@@ -12,46 +11,22 @@ class DCCPTFRCAgent:
         self.r_hist = []
         self.num_dup_acks = num_dup_acks
     def findDataPacketInRecvHistory(self, start=0):
-        """Find the first data packet, skipping ACK entries."""
-        while start < len(self.r_hist) and self.r_hist[start].type == DCCP_ACK:
-            start += 1
-        return self.r_hist[start] if start < len(self.r_hist) else None
+        return next((e for e in self.r_hist[start:] if e.type == DATA), None)
     def removeAcksRecvHistory(self):
-        """Remove ACK entries after the duplicate-ACK boundary."""
-        index = self.num_dup_acks
-        if index >= len(self.r_hist):
-            return
-        self.r_hist[index + 1:] = [
-            entry for entry in self.r_hist[index + 1:]
-            if entry.type != DCCP_ACK
-        ]
-
+        i = self.num_dup_acks
+        if i < len(self.r_hist):
+            self.r_hist[i+1:] = [e for e in self.r_hist[i+1:] if e.type != ACK]
     def removeOldDataPackets(self, seq_num, time):
-        """Remove old data packets matching the sequence/time conditions."""
-        index = self.num_dup_acks
-        if index >= len(self.r_hist):
-            return
-        data_packet = self.findDataPacketInRecvHistory(index + 1)
-        if data_packet is None:
-            return
-        start_index = self.r_hist.index(data_packet) + 1
-        self.r_hist[start_index:] = [
-            entry for entry in self.r_hist[start_index:]
-            if not (
-                entry.seq_num < seq_num
-                and entry.t_recv < time
-            )
-        ]
-# Example usage
-agent = DCCPTFRCAgent(num_dup_acks=1)
-agent.r_hist = [
-    RHistEntry(10, 1.0, DCCP_DATA),
-    RHistEntry(11, 1.1, DCCP_ACK),
-    RHistEntry(12, 1.2, DCCP_DATA),
-    RHistEntry(13, 1.3, DCCP_ACK),
-    RHistEntry(14, 1.4, DCCP_DATA),
-]
+        i = self.num_dup_acks
+        if i < len(self.r_hist):
+            p = self.findDataPacketInRecvHistory(i+1)
+            if p:
+                j = self.r_hist.index(p) + 1
+                self.r_hist[j:] = [e for e in self.r_hist[j:]
+                                   if not (e.seq_num < seq_num and e.t_recv < time)]
+agent = DCCPTFRCAgent(1)
+agent.r_hist = [RHistEntry(10,1.0,DATA), RHistEntry(11,1.1,ACK),
+                RHistEntry(12,1.2,DATA), RHistEntry(13,1.3,ACK),
+                RHistEntry(14,1.4,DATA)]
 agent.removeAcksRecvHistory()
-print("Receive history after removing ACKs:")
-for entry in agent.r_hist:
-    print(entry)
+print(*agent.r_hist, sep="\n")
